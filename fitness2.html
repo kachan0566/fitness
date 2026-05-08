@@ -1,0 +1,437 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>筋トレ管理アプリ</title>
+<style>
+body{
+    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+    background:#f5f5f5;
+    margin:0;
+    padding:16px;
+}
+.container{
+    max-width:760px;
+    margin:auto;
+}
+.card{
+    background:white;
+    border-radius:16px;
+    padding:16px;
+    margin-bottom:16px;
+    box-shadow:0 2px 8px rgba(0,0,0,0.08);
+}
+h1,h2,h3{
+    margin-top:0;
+}
+label{
+    font-weight:600;
+    font-size:14px;
+    display:block;
+}
+input,select,textarea{
+    width:100%;
+    padding:12px;
+    margin-top:8px;
+    margin-bottom:12px;
+    border-radius:10px;
+    border:1px solid #ccc;
+    box-sizing:border-box;
+    font-size:16px;
+    -webkit-appearance:none;
+    appearance:none;
+    background:white;
+}
+select{
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23666' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;
+    background-position:right 12px center;
+    padding-right:36px;
+}
+button{
+    display:block;
+    width:100%;
+    padding:14px 12px;
+    margin-top:8px;
+    margin-bottom:12px;
+    border-radius:10px;
+    border:none;
+    box-sizing:border-box;
+    font-size:16px;
+    font-weight:bold;
+    color:white;
+    background:black;
+    cursor:pointer;
+    -webkit-appearance:none;
+    appearance:none;
+    touch-action:manipulation;
+    user-select:none;
+    -webkit-user-select:none;
+}
+button:active{
+    opacity:0.75;
+}
+.secondary-btn{
+    background:#444;
+}
+.danger-btn{
+    background:#b00020;
+}
+.copy-btn{
+    background:#0b57d0;
+}
+.exercise-row{
+    background:#fafafa;
+    border:1px solid #ddd;
+    border-radius:14px;
+    padding:12px;
+    margin-bottom:12px;
+}
+.log{
+    background:#fafafa;
+    padding:12px;
+    border-radius:10px;
+    margin-bottom:10px;
+    border:1px solid #ddd;
+}
+.exercise-summary{
+    margin:8px 0;
+    padding:8px;
+    background:white;
+    border-radius:8px;
+    border:1px solid #e2e2e2;
+}
+.small{
+    color:#666;
+    font-size:14px;
+}
+/* トースト通知 */
+#toast{
+    position:fixed;
+    bottom:24px;
+    left:50%;
+    transform:translateX(-50%) translateY(80px);
+    background:#333;
+    color:white;
+    padding:12px 24px;
+    border-radius:24px;
+    font-size:15px;
+    font-weight:600;
+    z-index:9999;
+    transition:transform 0.3s ease, opacity 0.3s ease;
+    opacity:0;
+    white-space:nowrap;
+    max-width:90vw;
+    text-align:center;
+    box-shadow:0 4px 16px rgba(0,0,0,0.3);
+}
+#toast.show{
+    transform:translateX(-50%) translateY(0);
+    opacity:1;
+}
+#toast.success{ background:#1a7a3c; }
+#toast.error{ background:#b00020; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="card">
+<h1>筋トレ管理アプリ</h1>
+<p class="small">
+1回の保存で、複数のトレーニング内容をまとめて保存できます。
+</p>
+</div>
+
+<div class="card">
+<h2>今日の記録</h2>
+
+<label>日付</label>
+<input type="date" id="date">
+
+<label>体重(kg)</label>
+<input type="number" id="weight" step="0.1" inputmode="decimal">
+
+<label>睡眠時間</label>
+<input type="number" step="0.5" id="sleep" inputmode="decimal">
+
+<h3>トレーニング内容</h3>
+<div id="exerciseRows"></div>
+
+<button type="button" id="addExerciseBtn" class="secondary-btn">＋ 種目を追加</button>
+
+<label>疲労感(1-5)</label>
+<input type="number" min="1" max="5" id="fatigue" inputmode="numeric">
+
+<label>食事メモ</label>
+<textarea id="food" placeholder="例：プロテイン、おにぎり、鶏むね肉、ご飯"></textarea>
+
+<label>気分・感覚</label>
+<textarea id="memo" placeholder="例：胸に効いた／肩が先に疲れた／睡眠不足"></textarea>
+
+<button type="button" id="saveBtn">まとめて保存</button>
+</div>
+
+<div class="card">
+<h2>保存した記録</h2>
+<button type="button" id="copyBtn" class="copy-btn">ChatGPT用に記録をコピー</button>
+<div id="logs"></div>
+</div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+const logsContainer = document.getElementById("logs");
+const exerciseRows = document.getElementById("exerciseRows");
+const addExerciseBtn = document.getElementById("addExerciseBtn");
+const saveBtn = document.getElementById("saveBtn");
+const copyBtn = document.getElementById("copyBtn");
+const toast = document.getElementById("toast");
+
+let toastTimer = null;
+
+function showToast(message, type = ""){
+    toast.textContent = message;
+    toast.className = "show" + (type ? " " + type : "");
+    if(toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){
+        toast.className = "";
+    }, 2500);
+}
+
+function escapeHtml(text){
+    return String(text || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function todayString(){
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return yyyy + "-" + mm + "-" + dd;
+}
+
+function loadStorage(){
+    try{
+        return JSON.parse(localStorage.getItem("muscleLogs") || "[]");
+    }catch(e){
+        return [];
+    }
+}
+
+function saveStorage(logs){
+    try{
+        localStorage.setItem("muscleLogs", JSON.stringify(logs));
+        return true;
+    }catch(e){
+        showToast("保存できませんでした（ストレージエラー）", "error");
+        return false;
+    }
+}
+
+function createExerciseRow(data){
+    data = data || {};
+    const row = document.createElement("div");
+    row.className = "exercise-row";
+
+    const bodyParts = ["胸","背中","肩","脚","腕","腹筋","休み"];
+    const options = bodyParts.map(function(p){
+        return '<option value="' + p + '">' + p + '</option>';
+    }).join("");
+
+    row.innerHTML =
+        '<label>部位</label>' +
+        '<select class="bodyPart">' + options + '</select>' +
+        '<label>種目</label>' +
+        '<input type="text" class="exercise" placeholder="例：チェストプレス">' +
+        '<label>重量(kg)</label>' +
+        '<input type="number" class="weightUsed" step="0.5" inputmode="decimal">' +
+        '<label>回数</label>' +
+        '<input type="number" class="reps" inputmode="numeric">' +
+        '<label>セット数</label>' +
+        '<input type="number" class="sets" inputmode="numeric">' +
+        '<button type="button" class="danger-btn removeExerciseBtn">この種目を削除</button>';
+
+    row.querySelector(".bodyPart").value = data.bodyPart || "胸";
+    row.querySelector(".exercise").value = data.exercise || "";
+    row.querySelector(".weightUsed").value = data.weightUsed || "";
+    row.querySelector(".reps").value = data.reps || "";
+    row.querySelector(".sets").value = data.sets || "";
+
+    row.querySelector(".removeExerciseBtn").addEventListener("click", function(){
+        row.remove();
+        if(exerciseRows.children.length === 0){
+            addExerciseRow();
+        }
+    });
+
+    return row;
+}
+
+function addExerciseRow(){
+    const row = createExerciseRow();
+    exerciseRows.appendChild(row);
+    row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function getExercises(){
+    const rows = document.querySelectorAll(".exercise-row");
+    return Array.from(rows).map(function(row){
+        return {
+            bodyPart: row.querySelector(".bodyPart").value,
+            exercise: row.querySelector(".exercise").value.trim(),
+            weightUsed: row.querySelector(".weightUsed").value,
+            reps: row.querySelector(".reps").value,
+            sets: row.querySelector(".sets").value
+        };
+    }).filter(function(item){
+        return item.exercise || item.weightUsed || item.reps || item.sets || item.bodyPart === "休み";
+    });
+}
+
+function clearForm(){
+    document.getElementById("weight").value = "";
+    document.getElementById("sleep").value = "";
+    document.getElementById("fatigue").value = "";
+    document.getElementById("food").value = "";
+    document.getElementById("memo").value = "";
+    exerciseRows.innerHTML = "";
+    addExerciseRow();
+    document.getElementById("date").value = todayString();
+}
+
+function loadLogs(){
+    const logs = loadStorage();
+    logsContainer.innerHTML = "";
+
+    if(logs.length === 0){
+        logsContainer.innerHTML = '<p class="small">まだ記録がありません</p>';
+        return;
+    }
+
+    logs.slice().reverse().forEach(function(log){
+        const div = document.createElement("div");
+        div.className = "log";
+
+        const exercisesHtml = (log.exercises || []).map(function(item){
+            return '<div class="exercise-summary">' +
+                '部位: ' + escapeHtml(item.bodyPart || "-") + '<br>' +
+                '種目: ' + escapeHtml(item.exercise || "-") + '<br>' +
+                '重量: ' + escapeHtml(item.weightUsed || "-") + 'kg / ' +
+                escapeHtml(item.reps || "-") + '回 × ' +
+                escapeHtml(item.sets || "-") + 'セット' +
+                '</div>';
+        }).join("");
+
+        div.innerHTML =
+            '<strong>' + escapeHtml(log.date) + '</strong><br>' +
+            '体重: ' + escapeHtml(log.weight || "-") + 'kg<br>' +
+            '睡眠: ' + escapeHtml(log.sleep || "-") + '時間<br>' +
+            '疲労感: ' + escapeHtml(log.fatigue || "-") + '<br>' +
+            '<strong>トレーニング</strong>' +
+            (exercisesHtml || '<p>記録なし</p>') +
+            '食事: ' + escapeHtml(log.food || "-") + '<br>' +
+            'メモ: ' + escapeHtml(log.memo || "-");
+
+        logsContainer.appendChild(div);
+    });
+}
+
+function saveLog(){
+    const exercises = getExercises();
+
+    if(exercises.length === 0){
+        showToast("トレーニング内容を1つ以上入力してください", "error");
+        return;
+    }
+
+    const log = {
+        date: document.getElementById("date").value || todayString(),
+        weight: document.getElementById("weight").value,
+        sleep: document.getElementById("sleep").value,
+        exercises: exercises,
+        fatigue: document.getElementById("fatigue").value,
+        food: document.getElementById("food").value,
+        memo: document.getElementById("memo").value
+    };
+
+    const logs = loadStorage();
+    logs.push(log);
+
+    if(saveStorage(logs)){
+        showToast("保存しました！", "success");
+        clearForm();
+        loadLogs();
+    }
+}
+
+function copyLogs(){
+    const logs = loadStorage();
+
+    if(logs.length === 0){
+        showToast("コピーする記録がありません", "error");
+        return;
+    }
+
+    const text = logs.map(function(log){
+        const training = (log.exercises || []).map(function(item){
+            return "- " + item.bodyPart + " / " + item.exercise +
+                " / " + (item.weightUsed || "-") + "kg" +
+                " / " + (item.reps || "-") + "回" +
+                " / " + (item.sets || "-") + "セット";
+        }).join("\n");
+
+        return "日付: " + log.date + "\n" +
+            "体重: " + (log.weight || "-") + "kg\n" +
+            "睡眠: " + (log.sleep || "-") + "時間\n" +
+            "疲労感: " + (log.fatigue || "-") + "\n" +
+            "トレーニング:\n" + training + "\n" +
+            "食事: " + (log.food || "-") + "\n" +
+            "メモ: " + (log.memo || "-");
+    }).join("\n\n---\n\n");
+
+    if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text)
+            .then(function(){ showToast("記録をコピーしました", "success"); })
+            .catch(function(){ fallbackCopy(text); });
+    }else{
+        fallbackCopy(text);
+    }
+}
+
+function fallbackCopy(text){
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try{
+        document.execCommand("copy");
+        showToast("記録をコピーしました", "success");
+    }catch(e){
+        showToast("コピー失敗。手動でテキストをコピーしてください", "error");
+    }
+    document.body.removeChild(ta);
+}
+
+addExerciseBtn.addEventListener("click", addExerciseRow);
+saveBtn.addEventListener("click", saveLog);
+copyBtn.addEventListener("click", copyLogs);
+
+document.getElementById("date").value = todayString();
+addExerciseRow();
+loadLogs();
+</script>
+</body>
+</html>
