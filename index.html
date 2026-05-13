@@ -133,6 +133,44 @@ button:active{
 }
 #toast.success{ background:#1a7a3c; }
 #toast.error{ background:#b00020; }
+.suggestionArea{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-bottom:8px;
+}
+.suggestion-btn{
+    display:inline-block;
+    width:auto;
+    padding:8px 14px;
+    margin:0;
+    border-radius:20px;
+    font-size:13px;
+    font-weight:600;
+    background:#e8e8e8;
+    color:#333;
+    border:2px solid transparent;
+    cursor:pointer;
+    -webkit-appearance:none;
+    appearance:none;
+    touch-action:manipulation;
+    user-select:none;
+    -webkit-user-select:none;
+    transition:background 0.15s, border-color 0.15s;
+}
+.suggestion-btn:active{
+    opacity:0.75;
+}
+.suggestion-btn.selected{
+    background:#000;
+    color:#fff;
+    border-color:#000;
+}
+.day-copy-btn{
+    margin-top:10px;
+    padding:10px 12px;
+    font-size:14px;
+}
 </style>
 </head>
 <body>
@@ -238,6 +276,37 @@ function saveStorage(logs){
     }
 }
 
+const exerciseSuggestions = {
+    "胸": ["ベンチプレス","チェストプレス(マシン)","インクラインチェストプレス","ダンベルフライ","ペックフライ","ケーブルクロスオーバー","ディップス"],
+    "背中": ["懸垂(チンニング)","ラットプルダウン","シーテッドロウ","ベントオーバーロウ","ダンベルロウ","ワンハンドロー","デッドリフト"],
+    "肩": ["ショルダープレス","サイドレイズ","フロントレイズ","リアレイズ","アーノルドプレス","フェイスプル"],
+    "脚": ["スクワット","レッグプレス","レッグカール","レッグエクステンション","ランジ","カーフレイズ"],
+    "腕": ["ダンベルカール","バーベルカール","ハンマーカール","トライセプスプレスダウン","スカルクラッシャー","ディップス"],
+    "腹筋": ["クランチ","レッグレイズ","プランク","アブローラー","ツイスト"],
+    "休み": []
+};
+
+function renderSuggestions(row, bodyPart){
+    const container = row.querySelector(".suggestionArea");
+    const suggestions = exerciseSuggestions[bodyPart] || [];
+    if(suggestions.length === 0){
+        container.innerHTML = "";
+        return;
+    }
+    container.innerHTML = suggestions.map(function(s){
+        return '<button type="button" class="suggestion-btn">' + s + '</button>';
+    }).join("");
+    container.querySelectorAll(".suggestion-btn").forEach(function(btn){
+        btn.addEventListener("click", function(){
+            row.querySelector(".exercise").value = btn.textContent;
+            container.querySelectorAll(".suggestion-btn").forEach(function(b){
+                b.classList.remove("selected");
+            });
+            btn.classList.add("selected");
+        });
+    });
+}
+
 function createExerciseRow(data){
     data = data || {};
     const row = document.createElement("div");
@@ -252,7 +321,8 @@ function createExerciseRow(data){
         '<label>部位</label>' +
         '<select class="bodyPart">' + options + '</select>' +
         '<label>種目</label>' +
-        '<input type="text" class="exercise" placeholder="例：チェストプレス">' +
+        '<div class="suggestionArea"></div>' +
+        '<input type="text" class="exercise" placeholder="↑候補を選ぶか直接入力">' +
         '<label>重量(kg)</label>' +
         '<input type="number" class="weightUsed" step="0.5" inputmode="decimal">' +
         '<label>回数</label>' +
@@ -261,11 +331,19 @@ function createExerciseRow(data){
         '<input type="number" class="sets" inputmode="numeric">' +
         '<button type="button" class="danger-btn removeExerciseBtn">この種目を削除</button>';
 
-    row.querySelector(".bodyPart").value = data.bodyPart || "胸";
+    const bodyPartSelect = row.querySelector(".bodyPart");
+    bodyPartSelect.value = data.bodyPart || "胸";
     row.querySelector(".exercise").value = data.exercise || "";
     row.querySelector(".weightUsed").value = data.weightUsed || "";
     row.querySelector(".reps").value = data.reps || "";
     row.querySelector(".sets").value = data.sets || "";
+
+    renderSuggestions(row, bodyPartSelect.value);
+
+    bodyPartSelect.addEventListener("change", function(){
+        row.querySelector(".exercise").value = "";
+        renderSuggestions(row, bodyPartSelect.value);
+    });
 
     row.querySelector(".removeExerciseBtn").addEventListener("click", function(){
         row.remove();
@@ -309,6 +387,23 @@ function clearForm(){
     document.getElementById("date").value = todayString();
 }
 
+function logToText(log){
+    const training = (log.exercises || []).map(function(item){
+        return "- " + item.bodyPart + " / " + item.exercise +
+            " / " + (item.weightUsed || "-") + "kg" +
+            " / " + (item.reps || "-") + "回" +
+            " / " + (item.sets || "-") + "セット";
+    }).join("\n");
+
+    return "日付: " + log.date + "\n" +
+        "体重: " + (log.weight || "-") + "kg\n" +
+        "睡眠: " + (log.sleep || "-") + "時間\n" +
+        "疲労感: " + (log.fatigue || "-") + "\n" +
+        "トレーニング:\n" + training + "\n" +
+        "食事: " + (log.food || "-") + "\n" +
+        "メモ: " + (log.memo || "-");
+}
+
 function loadLogs(){
     const logs = loadStorage();
     logsContainer.innerHTML = "";
@@ -340,7 +435,19 @@ function loadLogs(){
             '<strong>トレーニング</strong>' +
             (exercisesHtml || '<p>記録なし</p>') +
             '食事: ' + escapeHtml(log.food || "-") + '<br>' +
-            'メモ: ' + escapeHtml(log.memo || "-");
+            'メモ: ' + escapeHtml(log.memo || "-") + '<br>' +
+            '<button type="button" class="copy-btn day-copy-btn">この日の記録をコピー</button>';
+
+        div.querySelector(".day-copy-btn").addEventListener("click", function(){
+            const text = logToText(log);
+            if(navigator.clipboard && navigator.clipboard.writeText){
+                navigator.clipboard.writeText(text)
+                    .then(function(){ showToast(log.date + " の記録をコピーしました", "success"); })
+                    .catch(function(){ fallbackCopy(text); });
+            }else{
+                fallbackCopy(text);
+            }
+        });
 
         logsContainer.appendChild(div);
     });
@@ -382,22 +489,7 @@ function copyLogs(){
         return;
     }
 
-    const text = logs.map(function(log){
-        const training = (log.exercises || []).map(function(item){
-            return "- " + item.bodyPart + " / " + item.exercise +
-                " / " + (item.weightUsed || "-") + "kg" +
-                " / " + (item.reps || "-") + "回" +
-                " / " + (item.sets || "-") + "セット";
-        }).join("\n");
-
-        return "日付: " + log.date + "\n" +
-            "体重: " + (log.weight || "-") + "kg\n" +
-            "睡眠: " + (log.sleep || "-") + "時間\n" +
-            "疲労感: " + (log.fatigue || "-") + "\n" +
-            "トレーニング:\n" + training + "\n" +
-            "食事: " + (log.food || "-") + "\n" +
-            "メモ: " + (log.memo || "-");
-    }).join("\n\n---\n\n");
+    const text = logs.map(logToText).join("\n\n---\n\n");
 
     if(navigator.clipboard && navigator.clipboard.writeText){
         navigator.clipboard.writeText(text)
